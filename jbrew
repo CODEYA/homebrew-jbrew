@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# Copyright 2018 CODEYA, Inc.
+# This code is licensed under MIT license (see LICENSE.txt for details)
+
+jbrew_version="0.0.1"
+jhome="/usr/libexec/java_home"
+
+function help() {
+  cat << EOF
+jbrew ${jbrew_version}
+
+Usage:
+    jbrew help                 Show this message
+    jbrew version              Show version information
+    jbrew use <version>        Use <version>
+    jbrew list                 List installed versions
+    jbrew ls                   Alias for \`list\`
+    jbrew current              Show current version
+    jbrew download <version>   Open download page for <version>.
+                               Supported version: "10", "9", "8", "7", "6"
+    jbrew install <version>    Alias for \`download\`
+EOF
+}
+function currentJavaVersion() {
+  jv=`java -version 2>&1 | grep -v "JAVA_TOOL_OPTIONS" | sed -e '2,$s/^/                /g'`
+  echo "JAVA_HOME     : ${JAVA_HOME}"
+  echo "java -version : ${jv}"
+}
+
+case "${1}" in
+  help)
+    help
+    exit 0
+    ;;
+  version)
+    echo "jbrew ${jbrew_version}"
+    exit 0
+    ;;
+  use)
+    if [[ -z "${2}" ]]; then help; exit 1; fi
+    je=`${jhome} -v ${2}`
+    if [[ "$?" != "0" ]]; then echo -n "" | pbcopy; exit 1; fi
+    echo -n "export JAVA_HOME=\"${je}\"" | pbcopy
+    echo "Please press command + v, and press enter."
+    ;;
+  list|ls)
+    v1=(`ls /System/Library/Frameworks/JavaVM.framework/Versions/ | grep -v -E "^A|^Current|^1.4|^1.5"`)
+    v2=(`ls /Library/Java/JavaVirtualMachines | sed -e "s/jdk-//" -e "s/.jdk//" -e "s/jdk//"`)
+    v=("${v1[@]}" "${v2[@]}")
+    for i in ${v[@]}; do
+      # ex) "1.8.4_131" -> "1.8"
+      v+=(`echo "${i}" | sed -E "s/^(1\.[0-9]\.[^_]+)_.+$/\1/"`)
+      # ex) "1.8.4_131" -> "1.8"
+      v+=(`echo "${i}" | sed -E "s/^(1\.[0-9]).+$/\1/"`)
+      # ex) "9.0.4" -> "9.0"
+      v+=(`echo "${i}" | sed -E "s/^([2-9]\.[0-9]).+$/\1/"`)
+      # ex) "9.0.4" -> "9"
+      v+=(`echo "${i}" | sed -E "s/^([2-9])\..+$/\1/"`)
+      # ex) "10.0.1" -> "10.0"
+      v+=(`echo "${i}" | sed -E "s/^(1[0-9]\.[0-9]).+$/\1/"`)
+      # ex) "10.0.1" -> "10"
+      v+=(`echo "${i}" | sed -E "s/^(1[0-9])\..+$/\1/"`)
+    done
+    LF=$(printf '\\\012_')
+    LF=${LF%_}
+    echo "${v[@]}" | sed -E "s/ /${LF}/g" | sort -u | sort -n
+    ;;
+  current)
+    currentJavaVersion
+    ;;
+  install|download)
+    if [[ -z "${2}" ]]; then /usr/bin/open "http://www.oracle.com/technetwork/java/javase/downloads/index-jsp-138363.html"; exit 0; fi
+    case "${2}" in
+      10|9|8)
+        page=`curl http://www.oracle.com/technetwork/java/javase/downloads/index-jsp-138363.html 2> /dev/null`
+        path=`echo ${page} | grep -E "<a href=\"/technetwork/java/javase/downloads/jdk${2}-downloads-[^\"]+" | sed -E "s:^.*<a href=\"(/technetwork/java/javase/downloads/jdk${2}-downloads-[^\"]+).*$:\1:g"`
+        if [[ -z "${path}" ]]; then help; exit 1; fi
+        /usr/bin/open "https://www.oracle.com${path}"
+        ;;
+      7)
+        open "http://www.oracle.com/technetwork/java/javase/downloads/java-archive-downloads-javase7-521261.html"
+        ;;
+      6)
+        open "https://support.apple.com/kb/dl1572?locale=ja_JP"
+        ;;
+      *)
+        help
+        ;;
+    esac
+    ;;
+  *)
+    help
+    exit 1
+    ;;
+esac
+exit 0
